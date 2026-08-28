@@ -2024,594 +2024,401 @@
     // ADMIN PANEL
     // ============================================================
 
-    function renderAdminPanel() {
+   function renderAdminPanel(){
+  const wrap = el(`<div></div>`);
 
-      const wrap =
-        el(`<div></div>`);
+  const topRow = el(`<div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:-6px;"></div>`);
 
+  const changeBtn = el(`<button class="link">Change password</button>`);
+  changeBtn.onclick = () => {
+    adminChangingPassword = !adminChangingPassword;
+    render();
+  };
 
-      const topRow =
-        el(`<div class="admin-top"></div>`);
+  const lockBtn = el(`<button class="link">Lock</button>`);
+  lockBtn.onclick = async () => {
+    await signOut(window.firebaseAuth);
+    adminUnlocked = false;
+    adminChangingPassword = false;
+    bookings = [];
+    render();
+  };
 
+  topRow.appendChild(changeBtn);
+  topRow.appendChild(lockBtn);
+  wrap.appendChild(topRow);
 
-      const changeBtn =
-        el(`
-          <button class="link">
-            Change password
-          </button>
-        `);
+  if (adminChangingPassword){
+    wrap.appendChild(renderChangePassword());
+  }
 
+  // =========================================================
+  // ADD TIMESLOT
+  // =========================================================
 
-      changeBtn.onclick = () => {
+  wrap.appendChild(
+    el(`<h3 style="margin:16px 0 10px;">Add a timeslot</h3>`)
+  );
 
-        adminChangingPassword =
-          !adminChangingPassword;
+  const addForm = el(`
+    <div class="card admin-add">
+      <div>
+        <label for="a-date">Date</label>
+        <input type="date" id="a-date">
+      </div>
 
-        render();
-      };
+      <div>
+        <label for="a-time">Time</label>
+        <input type="time" id="a-time">
+      </div>
 
+      <div style="flex:0 0 auto;">
+        <button class="primary" id="a-add" style="margin-top:14px;">
+          Add slot
+        </button>
+      </div>
+    </div>
+  `);
 
-      const lockBtn =
-        el(`
-          <button class="link">
-            Lock
-          </button>
-        `);
+  wrap.appendChild(addForm);
 
+  const addErr = el(`<div class="error" style="display:none;"></div>`);
+  wrap.appendChild(addErr);
 
-      lockBtn.onclick = async () => {
+  addForm.querySelector('#a-add').onclick = async () => {
 
-        await signOut(auth);
+    const dateVal = addForm.querySelector('#a-date').value;
+    const timeVal = addForm.querySelector('#a-time').value;
 
-        adminUnlocked = false;
+    if (!dateVal || !timeVal){
+      addErr.textContent = 'Pick both a date and a time.';
+      addErr.style.display = 'block';
+      return;
+    }
 
-        adminChangingPassword = false;
+    const iso = new Date(`${dateVal}T${timeVal}`).toISOString();
+    const slotId = uid();
 
-        bookings = [];
+    try {
 
-        render();
-      };
-
-
-      topRow.appendChild(
-        changeBtn
-      );
-
-      topRow.appendChild(
-        lockBtn
-      );
-
-      wrap.appendChild(
-        topRow
-      );
-
-
-      if (adminChangingPassword) {
-
-        wrap.appendChild(
-          renderChangePassword()
-        );
-      }
-
-
-      wrap.appendChild(
-        el(`
-          <h3 style="margin:16px 0 10px;">
-            Add a timeslot
-          </h3>
-        `)
-      );
-
-
-      const addForm =
-        el(`
-
-          <div class="card admin-add">
-
-            <div>
-
-              <label for="a-date">
-                Date
-              </label>
-
-              <input
-                type="date"
-                id="a-date"
-              >
-
-            </div>
-
-
-            <div>
-
-              <label for="a-time">
-                Time
-              </label>
-
-              <input
-                type="time"
-                id="a-time"
-              >
-
-            </div>
-
-
-            <div style="flex:0 0 auto;">
-
-              <button
-                class="primary"
-                id="a-add"
-              >
-                Add slot
-              </button>
-
-            </div>
-
-          </div>
-
-        `);
-
-
-      wrap.appendChild(
-        addForm
-      );
-
-
-      const addErr =
-        el(`
-          <div
-            class="error"
-            style="display:none;"
-          ></div>
-        `);
-
-
-      wrap.appendChild(
-        addErr
-      );
-
-
-      addForm.querySelector(
-        "#a-add"
-      ).onclick = async () => {
-
-        const dateVal =
-          addForm.querySelector(
-            "#a-date"
-          ).value;
-
-
-        const timeVal =
-          addForm.querySelector(
-            "#a-time"
-          ).value;
-
-
-        if (!dateVal || !timeVal) {
-
-          addErr.textContent =
-            "Pick both a date and a time.";
-
-          addErr.style.display =
-            "block";
-
-          return;
+      await setDoc(
+        doc(window.firebaseDb, SLOTS_COLLECTION, slotId),
+        {
+          dateTime: iso,
+          booked: false,
+          categoryId: null
         }
+      );
+
+      await loadAllSilent();
+
+      addErr.style.display = 'none';
+      render();
+
+    } catch(e) {
+
+      console.error(e);
+
+      addErr.textContent = 'Could not save the timeslot.';
+      addErr.style.display = 'block';
+    }
+  };
 
 
-        const iso =
-          new Date(
-            `${dateVal}T${timeVal}`
-          ).toISOString();
+  // =========================================================
+  // TIMESLOTS
+  // =========================================================
+
+  wrap.appendChild(
+    el(`<h3 style="margin:24px 0 10px;">Timeslots</h3>`)
+  );
+
+  const bookedSlotIds = new Map(
+    bookings.map(b => [b.slotId, b])
+  );
+
+  if (slots.length === 0){
+
+    wrap.appendChild(
+      el(`<p class="empty">No timeslots added yet.</p>`)
+    );
+
+  } else {
+
+    const table = el(`
+      <table>
+        <thead>
+          <tr>
+            <th>Date & time</th>
+            <th>Room</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    `);
+
+    const tbody = table.querySelector('tbody');
+
+    [...slots]
+      .sort(
+        (a,b) =>
+          new Date(a.dateTime) - new Date(b.dateTime)
+      )
+      .forEach(s => {
+
+        const b = bookedSlotIds.get(s.id);
+
+        const tr = el(`
+          <tr>
+            <td>${fmt(s.dateTime)}</td>
+
+            <td>${roomFor(s.dateTime)}</td>
+
+            <td>
+              ${
+                b
+                  ? `<span class="status booked">${b.name}</span>`
+                  : `<span class="status open">open</span>`
+              }
+            </td>
+
+            <td></td>
+          </tr>
+        `);
 
 
-        const slotId =
-          uid();
+        // =====================================================
+        // BOOKED SLOT → CANCEL BOOKING
+        // =====================================================
 
+        if (b){
 
-        const btn =
-          addForm.querySelector(
-            "#a-add"
+          const cancelBtn = el(
+            `<button class="danger-link">Cancel booking</button>`
           );
 
+          cancelBtn.onclick = async () => {
 
-        btn.disabled = true;
+            const confirmed = confirm(
+              `Cancel the booking for ${b.name}?\n\n` +
+              `The timeslot will become available again.`
+            );
 
-        btn.textContent =
-          "Adding…";
-
-
-        try {
-
-          await setDoc(
-            doc(
-              db,
-              SLOTS_COLLECTION,
-              slotId
-            ),
-            {
-              dateTime: iso,
-              booked: false,
-              categoryId: null
+            if (!confirmed){
+              return;
             }
-          );
 
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = 'Cancelling…';
 
-          await loadAllSilent();
+            try {
 
+              const slotRef = doc(
+                window.firebaseDb,
+                SLOTS_COLLECTION,
+                s.id
+              );
 
-          addErr.style.display =
-            "none";
-
-
-          btn.disabled = false;
-
-          btn.textContent =
-            "Add slot";
-
-
-          render();
-
-
-        } catch (e) {
-
-          console.error(e);
-
-
-          addErr.textContent =
-            "Could not save the timeslot.";
-
-          addErr.style.display =
-            "block";
-
-
-          btn.disabled = false;
-
-          btn.textContent =
-            "Add slot";
-        }
-      };
-
-
-      wrap.appendChild(
-        el(`
-          <h3 style="margin:24px 0 10px;">
-            Timeslots
-          </h3>
-        `)
-      );
-
-
-      const bookedSlotIds =
-        new Map(
-          bookings.map(
-            b => [
-              b.slotId,
-              b
-            ]
-          )
-        );
-
-
-      if (slots.length === 0) {
-
-        wrap.appendChild(
-          el(`
-            <p class="empty">
-              No timeslots added yet.
-            </p>
-          `)
-        );
-
-      } else {
-
-        const tableWrap =
-          el(`
-            <div class="table-wrap"></div>
-          `);
-
-
-        const table =
-          el(`
-
-            <table>
-
-              <thead>
-
-                <tr>
-
-                  <th>
-                    Date & time
-                  </th>
-
-                  <th>
-                    Room
-                  </th>
-
-                  <th>
-                    Status
-                  </th>
-
-                  <th></th>
-
-                </tr>
-
-              </thead>
-
-
-              <tbody></tbody>
-
-            </table>
-
-          `);
-
-
-        const tbody =
-          table.querySelector(
-            "tbody"
-          );
-
-
-        [...slots]
-          .sort(
-            (a, b) =>
-              new Date(a.dateTime) -
-              new Date(b.dateTime)
-          )
-          .forEach(slot => {
-
-            const booking =
-              bookedSlotIds.get(
-                slot.id
+              const bookingRef = doc(
+                window.firebaseDb,
+                BOOKINGS_COLLECTION,
+                s.id
               );
 
 
-            const tr =
-              el(`
+              // -------------------------------------------------
+              // Delete booking AND reopen slot atomically.
+              // -------------------------------------------------
 
-                <tr>
+              await runTransaction(
+                window.firebaseDb,
+                async (transaction) => {
 
-                  <td>
-                    ${escapeHtml(
-                      fmt(slot.dateTime)
-                    )}
-                  </td>
+                  const slotSnap =
+                    await transaction.get(slotRef);
 
-                  <td>
-                    ${escapeHtml(
-                      roomFor(
-                        slot.dateTime
-                      )
-                    )}
-                  </td>
+                  if (!slotSnap.exists()){
+                    throw new Error('SLOT_NOT_FOUND');
+                  }
 
-                  <td>
+                  const slotData = slotSnap.data();
 
-                    ${
-                      booking
+                  if (!slotData.booked){
+                    throw new Error('ALREADY_OPEN');
+                  }
 
-                        ? `
-                          <span class="status booked">
-                            ${escapeHtml(
-                              booking.name
-                            )}
-                          </span>
-                        `
+                  transaction.delete(bookingRef);
 
-                        : `
-                          <span class="status open">
-                            open
-                          </span>
-                        `
-                    }
-
-                  </td>
-
-                  <td></td>
-
-                </tr>
-
-              `);
-
-
-            if (!booking) {
-
-              const del =
-                el(`
-                  <button class="danger-link">
-                    Remove
-                  </button>
-                `);
-
-
-              del.onclick = async () => {
-
-                if (
-                  !confirm(
-                    "Remove this timeslot?"
-                  )
-                ) {
-                  return;
+                  transaction.update(slotRef, {
+                    booked: false,
+                    categoryId: null
+                  });
                 }
+              );
 
 
-                del.disabled = true;
+              // Refresh admin data.
 
-                del.textContent =
-                  "Removing…";
+              await loadAdminData();
+              await loadAllSilent();
 
+              render();
 
-                try {
+            } catch(e) {
 
-                  await deleteDoc(
-                    doc(
-                      db,
-                      SLOTS_COLLECTION,
-                      slot.id
-                    )
-                  );
+              console.error(e);
 
+              if (e.message === 'SLOT_NOT_FOUND') {
 
-                  await loadAllSilent();
+                alert(
+                  'The timeslot no longer exists.'
+                );
 
+              } else if (e.message === 'ALREADY_OPEN') {
 
-                  render();
+                alert(
+                  'This timeslot is already open.'
+                );
 
+              } else {
 
-                } catch (e) {
+                alert(
+                  'Could not cancel the booking.'
+                );
+              }
 
-                  console.error(e);
-
-                  alert(
-                    "Could not remove the timeslot."
-                  );
-
-
-                  del.disabled = false;
-
-                  del.textContent =
-                    "Remove";
-                }
-              };
-
-
-              tr
-                .querySelector(
-                  "td:last-child"
-                )
-                .appendChild(del);
+              cancelBtn.disabled = false;
+              cancelBtn.textContent = 'Cancel booking';
             }
+          };
+
+          tr
+            .querySelector('td:last-child')
+            .appendChild(cancelBtn);
 
 
-            tbody.appendChild(tr);
-          });
+        // =====================================================
+        // OPEN SLOT → REMOVE SLOT
+        // =====================================================
 
+        } else {
 
-        tableWrap.appendChild(
-          table
-        );
-
-
-        wrap.appendChild(
-          tableWrap
-        );
-      }
-
-
-      const countsHeader =
-        el(`
-
-          <div class="section-heading">
-
-            <h3 style="margin:0;">
-              Booking counts
-            </h3>
-
-          </div>
-
-        `);
-
-
-      const exportBtn =
-        el(`
-          <button
-            class="secondary"
-            ${
-              bookings.length === 0
-                ? "disabled"
-                : ""
-            }
-          >
-            Export bookings (CSV)
-          </button>
-        `);
-
-
-      exportBtn.onclick =
-        downloadCsv;
-
-
-      countsHeader.appendChild(
-        exportBtn
-      );
-
-
-      wrap.appendChild(
-        countsHeader
-      );
-
-
-      const counts =
-        el(`<div></div>`);
-
-
-      CATEGORIES.forEach(cat => {
-
-        const count =
-          bookedCountFor(
-            cat.id
+          const del = el(
+            `<button class="danger-link">Remove</button>`
           );
 
+          del.onclick = async () => {
 
-        counts.appendChild(
-          el(`
+            const confirmed = confirm(
+              'Remove this timeslot?'
+            );
 
-            <p
-              style="
-                font-size:14px;
-                margin:4px 0;
-              "
-            >
+            if (!confirmed){
+              return;
+            }
 
-              ${escapeHtml(
-                cat.label
-              )}:
+            try {
 
-              <strong>
-                ${count} / ${cat.cap}
-              </strong>
+              await deleteDoc(
+                doc(
+                  window.firebaseDb,
+                  SLOTS_COLLECTION,
+                  s.id
+                )
+              );
 
-            </p>
+              await loadAllSilent();
+              render();
 
-          `)
-        );
+            } catch(e) {
+
+              console.error(e);
+
+              alert(
+                'Could not remove the timeslot.'
+              );
+            }
+          };
+
+          tr
+            .querySelector('td:last-child')
+            .appendChild(del);
+        }
+
+        tbody.appendChild(tr);
       });
 
-
-      wrap.appendChild(
-        counts
-      );
+    wrap.appendChild(table);
+  }
 
 
-      wrap.appendChild(
-        el(`
+  // =========================================================
+  // BOOKING COUNTS + CSV
+  // =========================================================
 
-          <p
-            class="footnote"
-            style="margin-top:20px;"
-          >
+  const countsHeader = el(`
+    <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin:24px 0 10px;
+    ">
+    </div>
+  `);
 
-            Rooms are assigned automatically:
+  countsHeader.appendChild(
+    el(`<h3 style="margin:0;">Booking counts</h3>`)
+  );
 
-            September dates →
-            1832-358,
+  const exportBtn = el(`
+    <button
+      class="secondary"
+      ${bookings.length === 0 ? 'disabled' : ''}
+    >
+      Export bookings (CSV)
+    </button>
+  `);
 
-            October dates →
-            1832-320.
+  exportBtn.onclick = downloadCsv;
 
-            Only authenticated admin accounts
-            can manage timeslots or view booking
-            names and email addresses.
+  countsHeader.appendChild(exportBtn);
+  wrap.appendChild(countsHeader);
 
-          </p>
+  const counts = el(`<div></div>`);
 
-        `)
-      );
+  CATEGORIES.forEach(cat => {
+
+    const count = bookedCountFor(cat.id);
+
+    counts.appendChild(
+      el(`
+        <p style="font-size:14px;margin:4px 0;">
+          ${cat.label}:
+          <strong>${count} / ${cat.cap}</strong>
+        </p>
+      `)
+    );
+  });
+
+  wrap.appendChild(counts);
 
 
-      return wrap;
-    }
+  wrap.appendChild(
+    el(`
+      <p class="footnote">
+        Rooms are assigned automatically:
+        September dates → 1832-358,
+        October dates → 1832-320.
+        Only authenticated admin accounts can manage
+        timeslots and bookings.
+      </p>
+    `)
+  );
 
+  return wrap;
+}
 
     // ============================================================
     // AUTHENTICATION

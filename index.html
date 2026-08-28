@@ -2037,12 +2037,12 @@
 
   const lockBtn = el(`<button class="link">Lock</button>`);
   lockBtn.onclick = async () => {
-    await signOut(window.firebaseAuth);
-    adminUnlocked = false;
-    adminChangingPassword = false;
-    bookings = [];
-    render();
-  };
+  await signOut(auth);
+  adminUnlocked = false;
+  adminChangingPassword = false;
+  bookings = [];
+  render();
+};
 
   topRow.appendChild(changeBtn);
   topRow.appendChild(lockBtn);
@@ -2102,7 +2102,7 @@
     try {
 
       await setDoc(
-        doc(window.firebaseDb, SLOTS_COLLECTION, slotId),
+        doc(db, SLOTS_COLLECTION, slotId),
         {
           dateTime: iso,
           booked: false,
@@ -2216,13 +2216,13 @@
             try {
 
               const slotRef = doc(
-                window.firebaseDb,
+                db,
                 SLOTS_COLLECTION,
                 s.id
               );
 
               const bookingRef = doc(
-                window.firebaseDb,
+                db,
                 BOOKINGS_COLLECTION,
                 s.id
               );
@@ -2233,7 +2233,7 @@
               // -------------------------------------------------
 
               await runTransaction(
-                window.firebaseDb,
+                db,
                 async (transaction) => {
 
                   const slotSnap =
@@ -2323,7 +2323,7 @@
 
               await deleteDoc(
                 doc(
-                  window.firebaseDb,
+                  db,
                   SLOTS_COLLECTION,
                   s.id
                 )

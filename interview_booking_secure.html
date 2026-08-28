@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interview Booking</title>
+<style>
+  :root{
+    --ink:#1c1e21;
+    --paper:#fafaf9;
+    --line:#e2e0db;
+    --accent:#2c6e5e;
+    --accent-light:#e7f0ed;
+    --danger:#a4423a;
+    --muted:#767267;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.45;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:32px 20px 80px;}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-0.01em;}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 28px;}
+  nav{display:flex;gap:6px;margin-bottom:28px;border-bottom:1px solid var(--line);}
+  nav button{
+    background:none;border:none;font-size:14px;padding:10px 14px;cursor:pointer;
+    color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;
+  }
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+  .card{
+    border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:12px;background:#fff;
+  }
+  .cat-row{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .cat-name{font-weight:600;font-size:15px;}
+  .cat-meta{font-size:13px;color:var(--muted);margin-top:2px;}
+  .count{font-size:13px;color:var(--muted);white-space:nowrap;}
+  .count.full{color:var(--danger);font-weight:600;}
+  button.primary{
+    background:var(--accent);color:#fff;border:none;border-radius:7px;
+    padding:9px 16px;font-size:14px;cursor:pointer;font-weight:500;
+  }
+  button.primary:disabled{background:#c9c6bd;cursor:not-allowed;}
+  button.secondary{
+    background:none;border:1px solid var(--line);border-radius:7px;
+    padding:8px 14px;font-size:13px;cursor:pointer;color:var(--ink);
+  }
+  button.link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0;text-decoration:underline;}
+  button.danger-link{background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0;text-decoration:underline;}
+  .slot-list{display:flex;flex-direction:column;gap:8px;margin:16px 0;}
+  .slot{
+    display:flex;justify-content:space-between;align-items:center;
+    border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:14px;
+  }
+  .slot button{flex-shrink:0;}
+  .empty{color:var(--muted);font-size:14px;padding:14px 0;}
+  label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px;}
+  input[type=text],input[type=email],input[type=date],input[type=time]{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;font-size:14px;font-family:inherit;
+  }
+  .form-actions{margin-top:18px;display:flex;gap:10px;}
+  .confirm-box{
+    background:var(--accent-light);border:1px solid var(--accent);border-radius:10px;
+    padding:18px;margin-top:8px;
+  }
+  .confirm-box h3{margin:0 0 8px;font-size:16px;}
+  .confirm-box p{margin:3px 0;font-size:14px;}
+  .room{font-weight:700;color:var(--accent);}
+  .back{margin-bottom:14px;}
+  .admin-add{display:flex;gap:8px;align-items:end;flex-wrap:wrap;}
+  .admin-add > div{flex:1;min-width:130px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
+  th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.02em;}
+  .status{font-size:11px;padding:2px 7px;border-radius:20px;background:#eee;color:var(--muted);}
+  .status.booked{background:#f1e3d3;color:#8a5a1e;}
+  .status.open{background:var(--accent-light);color:var(--accent);}
+  .loading{color:var(--muted);font-size:14px;}
+  .error{color:var(--danger);font-size:13px;margin-top:8px;}
+  .footnote{font-size:12px;color:var(--muted);margin-top:26px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="loading">Loading…</div>
+</div>
+
+<script>
+/* ============================================================
+   STORAGE SETUP — Firebase Firestore + Authentication
+
+   Public visitors can read slot availability and create a booking,
+   but cannot read private booking records.
+
+   Admin access is handled by Firebase Authentication.
+   ============================================================ */
+</script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+  import {
+    getFirestore, doc, setDoc, deleteDoc, collection, getDocs, runTransaction
+  } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAj360H9a1ePHTY-omQdE2OSGQYNbLh2tw",
+    authDomain: "interview-booking-f671d.firebaseapp.com",
+    projectId: "interview-booking-f671d",
+    storageBucket: "interview-booking-f671d.firebasestorage.app",
+    messagingSenderId: "929253914527",
+    appId: "1:929253914527:web:571963799ae12c903fafaa"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // Make Firebase services available to the rest of this page.
+  window.firebaseDb = db;
+  window.firebaseAuth = auth;
+
+  // This module script can finish loading after the plain <script> below has already
+  // started running, so let that script know the moment Firebase is actually ready.
+  window.dispatchEvent(new Event('storage-ready'));
+</script>
+
+<script>
+/* ============================================================ */
+
+const CATEGORIES = [
+  { id:'bach1', label:'Bachelor — 1st Semester', cap:10 },
+  { id:'mast1', label:'Master — 1st Semester', cap:10 },
+  { id:'bach3', label:'Bachelor — 3rd Semester', cap:5 },
+  { id:'bach5', label:'Bachelor — 5th Semester', cap:5 },
+];
+
+const SLOTS_COLLECTION = 'slots';
+const BOOKINGS_COLLECTION = 'bookings';
+
+let slots = [];       // {id, dateTime, booked, categoryId}
+let bookings = [];    // populated only after admin authentication
+let adminUnlocked = false;
+let adminChangingPassword = false;
+let view = { tab:'book', step:'categories', categoryId:null, slotId:null };
+let loadError = null;
+
+const app = document.getElementById('app');
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+function roomFor(dateTimeStr){
+  const d = new Date(dateTimeStr);
+  const m = d.getMonth() + 1; // 1-indexed
+  if (m === 9) return '1832-358';
+  if (m === 10) return '1832-320';
+  return 'TBD — outside Sept/Oct';
+}
+
+function fmt(dateTimeStr){
+  const d = new Date(dateTimeStr);
+  return d.toLocaleString(undefined, { weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+async function loadAll(){
+  try{
+    const snap = await getDocs(collection(window.firebaseDb, SLOTS_COLLECTION));
+
+    slots = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    // Public visitors never download private booking records.
+    bookings = [];
+    loadError = null;
+  }catch(e){
+    console.error(e);
+    loadError = 'Could not load booking data. Please refresh.';
+  }
+  render();
+}
+
+async function loadAdminData(){
+  const snap = await getDocs(
+    collection(window.firebaseDb, BOOKINGS_COLLECTION)
+  );
+
+  bookings = snap.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}
+
+async function loadAllSilent(){
+  try{
+    const snap = await getDocs(collection(window.firebaseDb, SLOTS_COLLECTION));
+
+    slots = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+  }catch(e){
+    console.error(e);
+  }
+}
+
+// ---------- render ----------
+
+function render(){
+  if (loadError){
+    app.innerHTML = `<h1>Interview Booking</h1><p class="error">${loadError}</p>`;
+    return;
+  }
+  app.innerHTML = '';
+  app.appendChild(renderHeader());
+  app.appendChild(renderNav());
+  if (view.tab === 'book') app.appendChild(renderBookTab());
+  else app.appendChild(renderAdminTab());
+}
+
+function el(html){
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+function renderHeader(){
+  return el(`
+    <div>
+      <h1>Interview Booking</h1>
+      <p class="sub">Book a fixed timeslot for your program interview.</p>
+    </div>
+  `);
+}
+
+function renderNav(){
+  const nav = el(`<nav></nav>`);
+  const bookBtn = el(`<button class="${view.tab==='book'?'active':''}">Book a slot</button>`);
+  bookBtn.onclick = () => setView({ tab:'book', step:'categories' });
+  const adminBtn = el(`<button class="${view.tab==='admin'?'active':''}">Manage timeslots</button>`);
+  adminBtn.onclick = () => {
+    setView({ tab:'admin' });
+  };
+  nav.appendChild(bookBtn);
+  nav.appendChild(adminBtn);
+  return nav;
+}
+
+// ---- Book tab ----
+
+function renderBookTab(){
+  const container = el(`<div></div>`);
+  if (view.step === 'categories') container.appendChild(renderCategories());
+  else if (view.step === 'slots') container.appendChild(renderSlotPicker());
+  else if (view.step === 'form') container.appendChild(renderForm());
+  else if (view.step === 'done') container.appendChild(renderDone());
+  return container;
+}
+
+function renderCategories(){
+  const wrap = el(`<div></div>`);
+  CATEGORIES.forEach(cat => {
+    const count = bookedCountFor(cat.id);
+    const full = count >= cat.cap;
+    const card = el(`
+      <div class="card">
+        <div class="cat-row">
+          <div>
+            <div class="cat-name">${cat.label}</div>
+            <div class="cat-meta">${full ? 'Fully booked' : 'Open for booking'}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="count ${full ? 'full' : ''}">${count} / ${cat.cap} booked</div>
+          </div>
+        </div>
+      </div>
+    `);
+    const row = card.querySelector('.cat-row');
+    const btn = el(`<button class="primary" ${full ? 'disabled' : ''}>${full ? 'Full' : 'Book'}</button>`);
+    if (!full) btn.onclick = () => setView({ step:'slots', categoryId:cat.id });
+    row.appendChild(btn);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderSlotPicker(){
+  const cat = CATEGORIES.find(c => c.id === view.categoryId);
+  const wrap = el(`<div></div>`);
+  const back = el(`<button class="secondary back">← Back</button>`);
+  back.onclick = () => setView({ step:'categories' });
+  wrap.appendChild(back);
+  wrap.appendChild(el(`<h3 style="margin:0 0 4px;">${cat.label}</h3>`));
+  wrap.appendChild(el(`<p class="cat-meta" style="margin-bottom:14px;">Choose an available timeslot.</p>`));
+
+  const avail = availableSlots();
+  if (avail.length === 0){
+    wrap.appendChild(el(`<p class="empty">No timeslots are open right now. Please check back later.</p>`));
+    return wrap;
+  }
+  const list = el(`<div class="slot-list"></div>`);
+  avail.forEach(s => {
+    const row = el(`
+      <div class="slot">
+        <span>${fmt(s.dateTime)} <span style="color:var(--muted);">— Room ${roomFor(s.dateTime)}</span></span>
+      </div>
+    `);
+    const btn = el(`<button class="secondary">Select</button>`);
+    btn.onclick = () => setView({ step:'form', slotId:s.id });
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function renderForm(){
+  const cat = CATEGORIES.find(c => c.id === view.categoryId);
+  const slot = slots.find(s => s.id === view.slotId);
+  const wrap = el(`<div></div>`);
+  const back = el(`<button class="secondary back">← Back</button>`);
+  back.onclick = () => setView({ step:'slots' });
+  wrap.appendChild(back);
+
+  wrap.appendChild(el(`
+    <div class="card">
+      <div class="cat-name">${cat.label}</div>
+      <div class="cat-meta">${fmt(slot.dateTime)} · Room ${roomFor(slot.dateTime)}</div>
+    </div>
+  `));
+
+  const form = el(`
+    <div>
+      <label for="f-name">Full name</label>
+      <input type="text" id="f-name" placeholder="Jane Doe">
+      <label for="f-email">Email</label>
+      <input type="email" id="f-email" placeholder="jane@example.com">
+      <div class="error" id="f-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button class="primary" id="f-submit">Confirm booking</button>
+      </div>
+    </div>
+  `);
+  wrap.appendChild(form);
+
+  form.querySelector('#f-submit').onclick = async () => {
+    const name = form.querySelector('#f-name').value.trim();
+    const email = form.querySelector('#f-email').value.trim();
+    const errEl = form.querySelector('#f-error');
+    if (!name || !email){
+      errEl.textContent = 'Please enter your name and email.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const btn = form.querySelector('#f-submit');
+    btn.disabled = true;
+    btn.textContent = 'Booking…';
+
+    const slotRef = doc(window.firebaseDb, SLOTS_COLLECTION, view.slotId);
+    const bookingRef = doc(window.firebaseDb, BOOKINGS_COLLECTION, view.slotId);
+
+    try {
+      await runTransaction(window.firebaseDb, async (transaction) => {
+        const slotSnap = await transaction.get(slotRef);
+
+        if (!slotSnap.exists()) {
+          throw new Error('SLOT_NOT_FOUND');
+        }
+
+        const slotData = slotSnap.data();
+
+        if (slotData.booked) {
+          throw new Error('SLOT_TAKEN');
+        }
+
+        const booking = {
+          slotId: view.slotId,
+          categoryId: view.categoryId,
+          name,
+          email,
+          dateTime: slotData.dateTime
+        };
+
+        transaction.set(bookingRef, booking);
+
+        transaction.update(slotRef, {
+          booked: true,
+          categoryId: view.categoryId
+        });
+      });
+
+      view = {
+        ...view,
+        bookingName: name,
+        bookingEmail: email
+      };
+
+      await loadAllSilent();
+      setView({ step:'done' });
+
+    }catch(e){
+      console.error(e);
+
+      if (e.message === 'SLOT_TAKEN') {
+        errEl.textContent = 'Sorry, that slot was just taken. Please pick another.';
+      } else if (e.message === 'SLOT_NOT_FOUND') {
+        errEl.textContent = 'Sorry, that timeslot no longer exists.';
+      } else {
+        errEl.textContent = 'Something went wrong saving your booking. Please try again.';
+      }
+
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Confirm booking';
+    }
+  };
+
+  return wrap;
+}
+
+async function loadAllSilent(){
+  try{
+    const [s, b] = await Promise.all([
+      window.storage.get(SLOTS_KEY, true).catch(()=>null),
+      window.storage.get(BOOKINGS_KEY, true).catch(()=>null),
+    ]);
+    slots = s ? JSON.parse(s.value) : [];
+    bookings = b ? JSON.parse(b.value) : [];
+  }catch(e){ /* keep existing state */ }
+}
+
+function renderDone(){
+  const cat = CATEGORIES.find(c => c.id === view.categoryId);
+  const last = {
+    name: view.bookingName,
+    email: view.bookingEmail,
+    dateTime: (slots.find(s => s.id === view.slotId) || {}).dateTime
+  };
+  const wrap = el(`
+    <div class="confirm-box">
+      <h3>You're booked ✓</h3>
+      <p><strong>${cat.label}</strong></p>
+      <p>${fmt(last.dateTime)}</p>
+      <p>Room: <span class="room">${roomFor(last.dateTime)}</span></p>
+      <p style="margin-top:10px;color:var(--muted);">A confirmation was recorded for ${last.name} (${last.email}).</p>
+      <p style="margin-top:10px;color:var(--muted);">Take a <b>screenshot</b> of this page to know when your booking is!</p>
+      <p style="margin-top:10px;color:var(--muted);">If you'd like your interview to be online or <b>cancel</b> your booking, write an email to au727953@uni.au.dk.</p>
+    </div>
+  `);
+  return wrap;
+}
+
+// ---- Admin tab ----
+
+function renderAdminTab(){
+  if (!adminUnlocked) return renderAdminLock();
+  return renderAdminPanel();
+}
+
+function renderAdminLock(){
+  const wrap = el(`<div></div>`);
+
+  const form = el(`
+    <div style="max-width:340px;">
+      <div class="card">
+        <div class="cat-name" style="margin-bottom:8px;">Admin login</div>
+        <p class="cat-meta" style="margin:0;">
+          Sign in with your Firebase admin account.
+        </p>
+      </div>
+
+      <label for="admin-email">Email</label>
+      <input
+        type="email"
+        id="admin-email"
+        placeholder="Admin email"
+        autocomplete="username"
+      >
+
+      <label for="admin-password">Password</label>
+      <input
+        type="password"
+        id="admin-password"
+        placeholder="Password"
+        autocomplete="current-password"
+      >
+
+      <div class="error" id="admin-error" style="display:none;"></div>
+
+      <div class="form-actions">
+        <button class="primary" id="admin-login">Log in</button>
+      </div>
+    </div>
+  `);
+
+  const login = async () => {
+    const email = form.querySelector('#admin-email').value.trim();
+    const password = form.querySelector('#admin-password').value;
+    const errEl = form.querySelector('#admin-error');
+
+    if (!email || !password){
+      errEl.textContent = 'Enter your email and password.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const btn = form.querySelector('#admin-login');
+    btn.disabled = true;
+    btn.textContent = 'Logging in…';
+
+    try {
+      await signInWithEmailAndPassword(
+        window.firebaseAuth,
+        email,
+        password
+      );
+
+      adminUnlocked = true;
+      await loadAdminData();
+      render();
+    } catch(e) {
+      console.error(e);
+      errEl.textContent = 'Incorrect email or password.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Log in';
+    }
+  };
+
+  form.querySelector('#admin-login').onclick = login;
+  form.querySelector('#admin-password')
+    .addEventListener('keydown', e => {
+      if (e.key === 'Enter') login();
+    });
+
+  wrap.appendChild(form);
+  return wrap;
+}
+
+function bookingsToCsv(){
+  const header = ['Name','Email','Category','Date & Time','Room'];
+  const rows = [...bookings]
+    .sort((a,b) => new Date(a.dateTime) - new Date(b.dateTime))
+    .map(b => {
+      const cat = CATEGORIES.find(c => c.id === b.categoryId);
+      return [
+        b.name,
+        b.email,
+        cat ? cat.label : b.categoryId,
+        fmt(b.dateTime),
+        roomFor(b.dateTime),
+      ];
+    });
+  const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+  const lines = [header, ...rows].map(r => r.map(escape).join(','));
+  return lines.join('\r\n');
+}
+
+function downloadCsv(){
+  const csv = bookingsToCsv();
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `bookings-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function renderAdminPanel(){
+  const wrap = el(`<div></div>`);
+
+  const topRow = el(`<div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:-6px;"></div>`);
+  const changeBtn = el(`<button class="link">Change password</button>`);
+  changeBtn.onclick = () => { adminChangingPassword = !adminChangingPassword; render(); };
+  const lockBtn = el(`<button class="link">Lock</button>`);
+  lockBtn.onclick = async () => {
+    await signOut(window.firebaseAuth);
+    adminUnlocked = false;
+    adminChangingPassword = false;
+    bookings = [];
+    render();
+  };
+  topRow.appendChild(changeBtn);
+  topRow.appendChild(lockBtn);
+  wrap.appendChild(topRow);
+
+  if (adminChangingPassword){
+    wrap.appendChild(renderChangePassword());
+  }
+
+  wrap.appendChild(el(`<h3 style="margin:16px 0 10px;">Add a timeslot</h3>`));
+  const addForm = el(`
+    <div class="card admin-add">
+      <div>
+        <label for="a-date">Date</label>
+        <input type="date" id="a-date">
+      </div>
+      <div>
+        <label for="a-time">Time</label>
+        <input type="time" id="a-time">
+      </div>
+      <div style="flex:0 0 auto;">
+        <button class="primary" id="a-add" style="margin-top:14px;">Add slot</button>
+      </div>
+    </div>
+  `);
+  wrap.appendChild(addForm);
+  const addErr = el(`<div class="error" style="display:none;"></div>`);
+  wrap.appendChild(addErr);
+
+  addForm.querySelector('#a-add').onclick = async () => {
+    const dateVal = addForm.querySelector('#a-date').value;
+    const timeVal = addForm.querySelector('#a-time').value;
+    if (!dateVal || !timeVal){
+      addErr.textContent = 'Pick both a date and a time.';
+      addErr.style.display = 'block';
+      return;
+    }
+    const iso = new Date(`${dateVal}T${timeVal}`).toISOString();
+    const slotId = uid();
+
+    try {
+      await setDoc(
+        doc(window.firebaseDb, SLOTS_COLLECTION, slotId),
+        {
+          dateTime: iso,
+          booked: false,
+          categoryId: null
+        }
+      );
+
+      await loadAllSilent();
+      addErr.style.display = 'none';
+      render();
+    } catch(e) {
+      console.error(e);
+      addErr.textContent = 'Could not save the timeslot.';
+      addErr.style.display = 'block';
+    }
+  };
+
+  wrap.appendChild(el(`<h3 style="margin:24px 0 10px;">Timeslots</h3>`));
+  const bookedSlotIds = new Map(bookings.map(b => [b.slotId, b]));
+  if (slots.length === 0){
+    wrap.appendChild(el(`<p class="empty">No timeslots added yet.</p>`));
+  } else {
+    const table = el(`
+      <table>
+        <thead><tr><th>Date & time</th><th>Room</th><th>Status</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    `);
+    const tbody = table.querySelector('tbody');
+    [...slots].sort((a,b)=>new Date(a.dateTime)-new Date(b.dateTime)).forEach(s => {
+      const b = bookedSlotIds.get(s.id);
+      const tr = el(`
+        <tr>
+          <td>${fmt(s.dateTime)}</td>
+          <td>${roomFor(s.dateTime)}</td>
+          <td>${b ? `<span class="status booked">${b.name}</span>` : `<span class="status open">open</span>`}</td>
+          <td></td>
+        </tr>
+      `);
+      if (!b){
+        const del = el(`<button class="danger-link">Remove</button>`);
+        del.onclick = async () => {
+          try {
+            await deleteDoc(
+              doc(window.firebaseDb, SLOTS_COLLECTION, s.id)
+            );
+
+            await loadAllSilent();
+            render();
+          } catch(e) {
+            console.error(e);
+            alert('Could not remove the timeslot.');
+          }
+        };
+        tr.querySelector('td:last-child').appendChild(del);
+      }
+      tbody.appendChild(tr);
+    });
+    wrap.appendChild(table);
+  }
+
+  const countsHeader = el(`<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 10px;"></div>`);
+  countsHeader.appendChild(el(`<h3 style="margin:0;">Booking counts</h3>`));
+  const exportBtn = el(`<button class="secondary" ${bookings.length === 0 ? 'disabled' : ''}>Export bookings (CSV)</button>`);
+  exportBtn.onclick = downloadCsv;
+  countsHeader.appendChild(exportBtn);
+  wrap.appendChild(countsHeader);
+  const counts = el(`<div></div>`);
+  CATEGORIES.forEach(cat => {
+    const count = bookedCountFor(cat.id);
+    counts.appendChild(el(`<p style="font-size:14px;margin:4px 0;">${cat.label}: <strong>${count} / ${cat.cap}</strong></p>`));
+  });
+  wrap.appendChild(counts);
+
+  wrap.appendChild(el(`<p class="footnote">Rooms are assigned automatically: September dates → 1832-358, October dates → 1832-320. Only authenticated admin accounts can manage timeslots.</p>`));
+
+  return wrap;
+}
+
+window.addEventListener('storage-ready', () => {
+  loadAll();
+  onAuthStateChanged(window.firebaseAuth, async (user) => {
+    if (user) {
+      adminUnlocked = true;
+      try {
+        await loadAdminData();
+        if (view.tab === 'admin') render();
+      } catch(e) {
+        console.error(e);
+      }
+    } else {
+      adminUnlocked = false;
+      bookings = [];
+    }
+  });
+}, { once: true });
+</script>
+</body>
+</html>
